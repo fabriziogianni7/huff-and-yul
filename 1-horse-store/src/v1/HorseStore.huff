@@ -1,0 +1,74 @@
+/// define interfaces for our contract sugnatures
+#define function updateHorseNumber(uint256) nonpayable returns() //0xcdfead2e
+#define function readNumberOfHorses() view returns(uint256) //0xe026c017
+
+/// constant
+#define constant NUM_HORSES_STORAGE_SLOT = FREE_STORAGE_POINTER()
+
+
+/// dispatcher
+#define macro MAIN() = takes(0) returns(0) {
+    // push calldata in stack and need to tell how many bytes to remove at the beginning. 0 in this case
+    0x00            // [0]
+    calldataload    // [calldata] 
+
+    // put in the stack the amount of bits (224 bits in my case) we want to remove after calldata, then shift. after shift, we'll have the function_selector'
+    0xe0            // [0xe0, calldataload]
+    shr             // [function_selector]
+
+    // duplicating what's in the stack
+    dup1            // [function_selector,function_selector] 
+
+    __FUNC_SIG(updateHorseNumber) // [0xcdfead2e, function_selector, function_selector]
+    eq               // [true_if_selector_matches, function_selector]
+   
+
+    updateJump      // [updateJump, true_if_selector_matches, function_selector]
+
+    // if second element in stack is true, jump to updateJump otherwise do nothing 
+    jumpi            // [0/1, function_selector]
+
+    // if the above don't jump bc its false, it will be: [function_selector]
+    __FUNC_SIG(readNumberOfHorses) // push the other f selector,  [0xe026c017,function_selector]
+    eq // at this point it should be true [true]
+    readJump // add the program coubnter [readJump, true]
+
+    jumpi // should call  READ_NUMBER_OF_HORSES
+
+    0x00 0x00 revert // revert the call if the function selector passed in don't match
+
+    updateJump:
+        SET_NUMBER_OF_HORSES()
+    readJump:
+        READ_NUMBER_OF_HORSES()
+}
+
+#define macro SET_NUMBER_OF_HORSES() = takes(0) returns(0){
+    // get the value to store from calldata and remove the first 4 bytes
+    0x04                        // [0x04]
+    calldataload                // [value] 
+
+    //find storage slot and push it on the stack [slot_index, value]
+    [NUM_HORSES_STORAGE_SLOT]   // [slot,value]
+
+    // store value in the storage and stop
+    sstore                      // []
+    stop
+}
+
+#define macro READ_NUMBER_OF_HORSES() = takes(0) returns(0){
+    // push storage slot in stack
+    [NUM_HORSES_STORAGE_SLOT]   // [slot_index]
+
+    // load the value at the storage slot
+    sload                       // [value]
+
+    // store value in memory before return it
+    0x00                        // [0,value]
+    mstore                      // [] - memory:[value] 
+
+    //returns what's in memory  
+    0x20 //32 bytes stack : [0x20]
+    0x00   // [0x00, 0x20]
+    return 
+}
